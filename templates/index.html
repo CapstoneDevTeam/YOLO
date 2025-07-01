@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>클라이밍 경로 시스템</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    canvas {
+      max-width: 100%;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧗 클라이밍 경로 웹</h1>
+
+    <div class="mode-selector">
+      <button onclick="switchMode('save')">경로 저장 모드</button>
+      <button onclick="switchMode('climb')">등반 모드</button>
+      <button onclick="switchMode('hold')">색상별 홀드 추출</button>
+    </div>
+
+    <div id="save-mode" class="mode hidden">
+      <h2>📌 경로 저장</h2>
+      <label for="save-color">🎨 색상 선택</label>
+      <select id="save-color">
+        <option value="red">빨강 🔴</option>
+        <option value="pink">핑크 💗</option>
+        <option value="orange">주황 🟠</option>
+        <option value="yellow">노랑 🟡</option>
+        <option value="lime">라임 🟩 </option>
+        <option value="green">초록 🟢</option>
+        <option value="sky">하늘 🟦</option>
+        <option value="blue">파랑 🔵</option>
+        <option value="purple">보라 🟣</option>
+        <option value="gray">회색 ⬜</option>
+        <option value="black">검정 ⚫</option>
+        <option value="white">흰색 ⚪</option>
+      </select>
+      <button onclick="savePath()">경로 추출 실행</button>
+      <div id="save-result" style="margin-top: 10px;"></div>
+    </div>
+
+    <div id="climb-mode" class="mode hidden">
+      <h2>🎨 등반 모드 - 색상 선택</h2>
+      <label for="color-select">🎨 색상 선택</label>
+      <select id="color-select">
+        <option value="red">빨강 🔴</option>
+        <option value="pink">핑크 💗</option>
+        <option value="orange">주황 🟠</option>
+        <option value="yellow">노랑 🟡</option>
+        <option value="lime">라임 🟩 </option>
+        <option value="green">초록 🟢</option>
+        <option value="sky">하늘 🟦</option>
+        <option value="blue">파랑 🔵</option>
+        <option value="purple">보라 🟣</option>
+        <option value="gray">회색 ⬜</option>
+        <option value="black">검정 ⚫</option>
+        <option value="white">흰색 ⚪</option>
+      </select>
+      <button onclick="loadPath()">동영상 가이드 보기</button>
+      <div id="climb-result"></div>
+    </div>
+
+    <div id="hold-mode" class="mode hidden">
+      <h2>🎯 색상별 홀드 추출 보기</h2>
+      <label for="hold-color">🎨 색상 선택</label>
+      <select id="hold-color">
+        <option value="red">빨강 🔴</option>
+        <option value="pink">핑크 💗</option>
+        <option value="orange">주황 🟠</option>
+        <option value="yellow">노랑 🟡</option>
+        <option value="lime">라임 🟩 </option>
+        <option value="green">초록 🟢</option>
+        <option value="sky">하늘 🟦</option>
+        <option value="blue">파랑 🔵</option>
+        <option value="purple">보라 🟣</option>
+        <option value="gray">회색 ⬜</option>
+        <option value="black">검정 ⚫</option>
+        <option value="white">흰색 ⚪</option>
+      </select>
+      <button onclick="showHoldImage()">홀드 이미지 보기</button>
+      <div id="hold-result" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <script>
+    function switchMode(mode) {
+      document.getElementById('save-mode').classList.add('hidden');
+      document.getElementById('climb-mode').classList.add('hidden');
+      document.getElementById('hold-mode').classList.add('hidden');
+      document.getElementById(`${mode}-mode`).classList.remove('hidden');
+    }
+
+    function savePath() {
+      const color = document.getElementById('save-color').value;
+      const resultDiv = document.getElementById('save-result');
+      resultDiv.innerHTML = '<p>⏳ 경로를 저장 중입니다... 잠시만 기다려주세요.</p>';
+      fetch('/save-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          resultDiv.innerHTML = `<p>✅ ${color} 경로 저장이 완료되었습니다!</p>`;
+        } else {
+          resultDiv.innerHTML = `<p style="color:red;">❌ 에러: ${data.message}</p>`;
+        }
+      })
+      .catch(err => {
+        resultDiv.innerHTML = `<p style="color:red;">❌ 서버 통신 오류: ${err.message}</p>`;
+      });
+    }
+
+    function loadPath() {
+      const color = document.getElementById('color-select').value;
+      const resultDiv = document.getElementById('climb-result');
+
+      resultDiv.innerHTML = `
+        <p>🎥 선택한 경로 (${color})의 등반 영상</p>
+        <video controls muted playsinline autoplay style="max-width:100%; border:1px solid #ccc;">
+          <source src="/static/${color}_climb.mp4" type="video/mp4">
+          해당 색상의 등반 영상을 불러올 수 없습니다.
+        </video>
+      `;
+    }
+
+
+    function showHoldImage() {
+      const color = document.getElementById('hold-color').value;
+      const holdDiv = document.getElementById('hold-result');
+      holdDiv.innerHTML = '<p>🌀 이미지를 생성 중입니다... 잠시만 기다려주세요.</p>';
+
+      fetch(`/get-hold-image/${color}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            holdDiv.innerHTML = `<img src="${data.image_url}" style="max-width:100%; border:1px solid #ccc;">`;
+          } else {
+            holdDiv.innerHTML = `<p style="color:red;">❌ 오류: ${data.message}</p>`;
+          }
+        })
+        .catch(err => {
+          holdDiv.innerHTML = `<p style="color:red;">❌ 서버 오류: ${err.message}</p>`;
+        });
+    }
+
+
+  </script>
+</body>
+</html>

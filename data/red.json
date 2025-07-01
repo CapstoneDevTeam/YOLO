@@ -1,0 +1,38 @@
+[
+  {
+    "part": "left_index",
+    "hold_id": 8,
+    "cx": 531,
+    "cy": 723
+  },
+  {
+    "part": "left_index",
+    "hold_id": 3,
+    "cx": 492,
+    "cy": 575
+  },
+  {
+    "part": "right_index",
+    "hold_id": 3,
+    "cx": 492,
+    "cy": 575
+  },
+  {
+    "part": "right_index",
+    "hold_id": 7,
+    "cx": 159,
+    "cy": 332
+  },
+  {
+    "part": "left_index",
+    "hold_id": 7,
+    "cx": 159,
+    "cy": 332
+  },
+  {
+    "part": "right_index",
+    "hold_id": 0,
+    "cx": 53,
+    "cy": 789
+  }
+]

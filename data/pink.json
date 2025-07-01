@@ -1,0 +1,50 @@
+[
+  {
+    "part": "left_index",
+    "hold_id": 12,
+    "cx": 240,
+    "cy": 503
+  },
+  {
+    "part": "left_index",
+    "hold_id": 10,
+    "cx": 242,
+    "cy": 498
+  },
+  {
+    "part": "right_index",
+    "hold_id": 8,
+    "cx": 295,
+    "cy": 473
+  },
+  {
+    "part": "left_index",
+    "hold_id": 0,
+    "cx": 209,
+    "cy": 473
+  },
+  {
+    "part": "right_index",
+    "hold_id": 1,
+    "cx": 257,
+    "cy": 350
+  },
+  {
+    "part": "left_index",
+    "hold_id": 7,
+    "cx": 195,
+    "cy": 543
+  },
+  {
+    "part": "right_index",
+    "hold_id": 4,
+    "cx": 145,
+    "cy": 784
+  },
+  {
+    "part": "right_index",
+    "hold_id": 11,
+    "cx": 313,
+    "cy": 749
+  }
+]
