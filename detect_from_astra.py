@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import mediapipe as mp
 import csv
+import os
 
 # YOLO 모델 로드
 model = YOLO("weights/best.pt")
@@ -68,6 +69,9 @@ if result.masks is None:
     cap.release()
     exit()
 
+print("🎯 YOLO 탐지 개수:", result.masks.shape[0])
+
+
 #BGR기준으로 작성함.
 color_map = {
     'Hold_Red':     (0, 0, 255),       # 🔴
@@ -97,62 +101,60 @@ names = model.names
 # [:2]는 처음부터 2번째까지 값만 쓰자.그게 이미지의 높이와 넓이임.
 img_h, img_w = first_frame.shape[:2]
 # 빈 리스트 선언, 윤곽선에 대한 정보 담을거임.
-hold_contours = []
+hold_contours = []  # 얘는 mediapipe 영상 처리에만 사용
+# yolo 돌려서 홀드 좌표들은 한 번에 색상별로 저장하는게 좋을 거 같다고 생각함
+hold_contours_all = {color: [] for color in all_colors}  # 얘는 YOLO 결과 전부 저장해버리기
 
 # masks.shape[0]은 객체 검출한 수, 즉 홀드 수 만큼 반복함
 for i in range(masks.shape[0]):
-    # GPU에 텐서 있으니까 CPU에 옮긴다는데 이거 잘 모르겠음.
-    # YOLO가 PyTorch이고 PyTorch는 GPU에서 계산된 텐서 이용.
-    # 근데 numpy / opencv는 GPU와 호환 X.
+    # GPU tensor → numpy 변환
     mask = masks[i].cpu().numpy()
-    # YOLO 모델에서 mask를 할 때 크기를 바꿔서 하기 때문에(아마 학습시킨 크기) 다시 원래의 이미지 크기로 되돌려야 함.
-    # 근데 이미지 크기를 마음대로 바꾼다? 조금의 수정이 필요하겠지. 그래서 cv2.INTER_NEAREST를 이용
-    # 이건 가까운 픽셀을 그저 복사하는 거임. 영상처리 수업 때 배운 이미지 resized 방식 그거.
+
+    # YOLO가 리사이즈한 마스크 → 원래 해상도로 복원
     resized_mask = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_NEAREST)
-    # 확률이 0.5이상인 것만. 255 곱해서 0~1을 0~255로 바꿔줌. openCV에서는 0~255를 사용하므로.
     binary_mask = (resized_mask > 0.7).astype(np.uint8) * 255
-    # findContours는 윤곽선을 찾아줌. 그 픽셀이 0이냐 아니냐를 보고 판단함. 0이 아니라면 객체겠지.
-    # RETR_EXTERNAL을 사용해서 외곽만 찾음
-    # CHAIN_APPROX_SIMPLE을 필요한 것만 땀. 직선으로 쭉 있으면 모든 점에 대한 정보 필요 없고 끝과 끝 점만 따면 됨.
-    # 뒤에  _는 계층 구조 담고있는건데 필요 없어서 _로 씀.
+
+    # 윤곽선 추출
     contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        continue
 
-    # class_id를 가져온다. 뭐 보통 tensor(3.)이렇게 있으니 item()으로 3.0만 뽑고 int로 3으로 만들어줌
-    # .item()은 PyTorch 텐서에서 값만 추출하는 함수
+    # 클래스 정보 추출
     cls_id = int(boxes.cls[i].item())
-    # 객체에 대한 신뢰도
     conf = float(boxes.conf[i].item())
-    # 아까 이름 설정한거 매핑과정이지 뭐.
     class_name = names[cls_id]
-    # .get은 딕셔너리 자료형에서 쓰는 함수. key값 보고 value값 반환해주는거지. 뒤에는 없을 경우 디폴트값. 하얀색으로 설정함.
-    color = color_map.get(class_name, (255, 255, 255))
+    color = color_map.get(class_name, (255, 255, 255))  # 시각화용 BGR 색상
 
-    # 입력한 색에 대한것만 그리고 윤곽선인것만
-    if class_name == selected_class and contours:
+    # YOLO class_name → 우리가 정한 color_key (예: Hold_Red → red)
+    color_key = next((k for k, v in all_colors.items() if v == class_name), None)
+    if color_key is None:
+        continue
 
-        # 홀드의 중심값 좌표 추출
-        # 객체 하나씩 보니까 [0]으로 한개의 객체만 봄봄
-        contour = contours[0]
-        # moments는 윤곽선 받아서 면적, 중심좌표 계산에 필요한 값들을 담은 딕셔너리 반환
-        M = cv2.moments(contour)
-        #m00은 면적, m10은 x좌표 총합, m01은 y좌표 총합
-        # 즉 무게중심 구하는거지지
-        if M["m00"] != 0:
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
-        else:
-            cx, cy = 0, 0
-        
-        # append는 리스트에 값 하나 추가하는 함수
-        # 지금까지 얻은 정보 넣어주는거지.
-        hold_contours.append({
-            "class_name": class_name,
-            "contour": contours[0],
-            "color": color,
-            "label": f"{class_name} {conf:.2f}",
-            "center": (cx, cy)
-        })
+    # 중심좌표 계산
+    contour = contours[0]
+    M = cv2.moments(contour)
+    cx, cy = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])) if M["m00"] != 0 else (0, 0)
 
+    # 바운더리 박스 계산 (중심 기준 상하좌우 최대거리)
+    mask_points = contour[:, 0, :]  # shape: (N, 2)
+    x_left   = min(mask_points[mask_points[:, 0] < cx][:, 0], default=cx)
+    x_right  = max(mask_points[mask_points[:, 0] > cx][:, 0], default=cx)
+    y_top    = min(mask_points[mask_points[:, 1] < cy][:, 1], default=cy)
+    y_bottom = max(mask_points[mask_points[:, 1] > cy][:, 1], default=cy)
+
+    # 홀드 정보 저장
+    hold_info = {
+        "class_name": class_name,
+        "contour": contour,
+        "color": color,
+        "label": f"{class_name} {conf:.2f}",
+        "center": (cx, cy),
+        "boundary": (x_left, y_top, x_right, y_bottom),
+        "index": len(hold_contours_all[color_key])
+    }
+    hold_contours_all[color_key].append(hold_info)
+# 선택한 색상에 대한 홀드 정보만 추출 → mediapipe 처리용
+hold_contours = hold_contours_all[selected_color]
 
 # CSV 파일 준비
 csv_file = open('data/hand_foot_coordinates.csv', 'w', newline='')
@@ -305,6 +307,19 @@ csv_file.close()
 out.release()
 cv2.destroyAllWindows()
 
+# 모든 색상 홀드 정보를 하나의 CSV로 저장
+os.makedirs("data", exist_ok=True)
+with open("data/all_bounding_boxes.csv", "w", newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(["color", "index", "cx", "cy", "x_left", "y_top", "x_right", "y_bottom"])
+    
+    for color, holds in hold_contours_all.items():
+        for hold in holds:
+            cx, cy = hold["center"]
+            x_left, y_top, x_right, y_bottom = hold["boundary"]
+            writer.writerow([color, hold["index"], cx, cy, x_left, y_top, x_right, y_bottom])
+
+
 with open("data/grip_records.csv", "w", newline='') as f:
     writer = csv.writer(f)
     writer.writerow(["part", "hold_id", "cx", "cy"])
@@ -312,3 +327,28 @@ with open("data/grip_records.csv", "w", newline='') as f:
 
 # 출력 영상
 # out = cv2.VideoWriter('outputs/ex4.mp4', ...)
+
+# 여기는 bounding_boxes에 해당하는 좌표값들 제대로 얻어진건지 파악하기 위해 좌표값들 연결해서 윤곽선 그려본 것. 제대로 나옴
+# YOLO 인식만 홀드에 정확하게 된다면 코드 그대로 써도 될 듯
+# ✅ 모든 색상에 대한 디버그 이미지 생성 및 저장
+for color, holds in hold_contours_all.items():
+    debug_img = first_frame.copy()
+    for hold in holds:
+        index = hold["index"]
+        cx, cy = hold["center"]
+        x_left, y_top, x_right, y_bottom = hold["boundary"]
+
+        # 사각형 그리기
+        cv2.rectangle(debug_img, (x_left, y_top), (x_right, y_bottom), (0, 255, 255), 2)
+        # 중심 좌표 표시
+        cv2.circle(debug_img, (cx, cy), 4, (0, 0, 255), -1)
+        # 인덱스 + 색상명 표시
+        cv2.putText(debug_img, f"{color}_{index}", (x_left, y_top - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+
+    # 이미지 저장 (예: data/debug_red.jpg)
+    cv2.imwrite(f"data/debug_{color}.jpg", debug_img)
+
+print("✅ 모든 색상 디버그 이미지 저장 완료!")
+
+
